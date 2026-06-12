@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Messages – ConnectHub</title>
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Theme Switcher Script -->
+    <script src="/js/theme.js"></script>
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <a href="/dashboard" class="nav-brand">
+            <svg viewBox="0 0 24 24">
+                <rect x="2" y="2" width="20" height="20" rx="4" stroke-width="2"></rect>
+                <path d="M12 7v10M7 12h10" stroke-width="2"></path>
+            </svg>
+            ConnectHub
+        </a>
+        
+        <div class="nav-menu">
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+            <a href="/contacts" class="nav-link">Contacts</a>
+            <a href="/messages" class="nav-link active">Messages</a>
+            <a href="/emergency" class="nav-link">SOS Console</a>
+        </div>
+
+        <div class="nav-actions">
+            <div class="network-widget" id="network-status-widget">
+                <span class="network-dot"></span>
+                <span class="network-text">Loading...</span>
+            </div>
+            <button class="theme-btn" id="navbar-theme-btn"></button>
+            <span id="user-username-display" style="font-weight: 600; font-size: 0.95rem; margin-right: 5px;"></span>
+            <button class="logout-btn" id="navbar-logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <div class="glass-card chat-container">
+            
+            <!-- Chat Sidebar (Contact Selector) -->
+            <div class="chat-sidebar">
+                <div class="sidebar-search">
+                    <label class="form-label" style="margin-bottom: 5px;">Start a Conversation</label>
+                    <input type="text" id="user-directory-search" class="form-control" placeholder="Search platform users...">
+                </div>
+                
+                <div class="contacts-list" id="sidebar-contacts-list">
+                    <!-- Dynamic Contact items rendered here -->
+                    <div style="text-align: center; color: var(--text-muted); padding-top: 30px;">
+                        No contacts available.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Main Area -->
+            <div class="chat-area" id="chat-active-viewport" style="display: none;">
+                
+                <!-- Chat Viewport Header -->
+                <div class="chat-header">
+                    <div class="active-contact-profile">
+                        <div class="active-contact-details">
+                            <h3 id="active-chat-name">John Doe</h3>
+                            <div class="active-contact-status" id="active-chat-status">
+                                <span class="status-dot-inline" style="width: 8px; height: 8px; border-radius: 50%; display: inline-block; background-color: var(--text-muted); margin-right: 5px;"></span>
+                                <span class="status-text">offline</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        <!-- Custom Search messages in active thread -->
+                        <div class="search-bar" style="max-width: 200px;">
+                            <input type="text" id="message-search-input" class="form-control" style="padding: 6px 12px; font-size: 0.85rem;" placeholder="Search chat...">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messages Display Viewport -->
+                <div class="messages-viewport" id="messages-display-viewport">
+                    <!-- Message bubbles appear here dynamically -->
+                </div>
+
+                <!-- Chat Input Form -->
+                <div class="chat-input-area">
+                    <div class="typing-indicator" id="typing-indicator-node">Recipient is typing...</div>
+                    <form id="chat-input-form" class="chat-input-form">
+                        <input type="text" id="message-text-input" class="form-control" placeholder="Type an emergency message..." required autocomplete="off">
+                        <button type="submit" class="btn btn-primary" id="chat-send-btn">
+                            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+
+            <!-- Welcome/Select Chat Placeholder -->
+            <div class="chat-area" id="chat-placeholder-viewport" style="display: flex; align-items: center; justify-content: center; text-align: center; color: var(--text-muted);">
+                <div>
+                    <svg viewBox="0 0 24 24" width="80" height="80" stroke="currentColor" stroke-width="1" fill="none" style="margin-bottom: 20px; color: var(--text-muted);">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <h2>Emergency Messaging Console</h2>
+                    <p style="margin-top: 10px; max-width: 400px; font-size: 0.95rem;">
+                        Select a priority contact or search platform users to open a secure chat channel.
+                    </p>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Core App JS Scripts -->
+    <script src="/js/app.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/socket.js"></script>
+
+    <!-- Page Specific Script -->
+    <script>
+        let chatContacts = [];
+        let activeChatContact = null;
+        let typingTimeout = null;
+
+        // Custom UUID generator for offline message creation
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        async function loadContactsList() {
+            const searchQuery = document.getElementById('user-directory-search').value.trim();
+            const listContainer = document.getElementById('sidebar-contacts-list');
+            
+            try {
+                if (searchQuery) {
+                    // Search all users in platform directory
+                    if (!isApplicationOnline) {
+                        listContainer.innerHTML = `<div style="text-align: center; color: var(--danger-color); font-size: 0.85rem; padding: 15px;">Search requires online connectivity.</div>`;
+                        return;
+                    }
+                    const res = await fetch(`/api/users/search?q=${encodeURIComponent(searchQuery)}`);
+                    if (res.ok) {
+                        const users = await res.json();
+                        chatContacts = users.map(u => ({
+                            id: 0,
+                            contact_name: u.username,
+                            phone_number: 'Platform Member',
+                            priority_level: 'low',
+                            platform_user_id: u.id
+                        }));
+                    }
+                } else {
+                    // Standard: Load priority emergency contacts list
+                    if (isApplicationOnline) {
+                        const res = await fetch('/api/contacts');
+                        if (res.ok) {
+                            chatContacts = await res.json();
+                        }
+                    } else {
+                        // Load from IndexedDB offline cache
+                        if (typeof dbGetAll === 'function') {
+                            const cached = await dbGetAll('cached_contacts');
+                            chatContacts = cached;
+                        }
+                    }
+                }
+                
+                renderContactsSidebar();
+            } catch (err) {
+                console.error('Failed to load contacts list:', err);
+            }
+        }
+
+        function renderContactsSidebar() {
+            const listContainer = document.getElementById('sidebar-contacts-list');
+            listContainer.innerHTML = '';
+
+            if (chatContacts.length === 0) {
+                listContainer.innerHTML = `
+                    <div style="text-align: center; color: var(--text-muted); padding: 30px; font-size: 0.9rem;">
+                        No channels found.
+                    </div>
+                `;
+                return;
+            }
+
+            chatContacts.forEach(c => {
+                // Skip contacts that are not registered on ConnectHub to prevent message routing failures
+                if (!c.platform_user_id) return;
+
+                const item = document.createElement('div');
+                const isOnline = window.onlineUsers.has(c.platform_user_id);
+                item.className = `chat-contact-item ${activeChatContact && activeChatContact.platform_user_id === c.platform_user_id ? 'active' : ''} ${isOnline ? 'online' : 'offline'}`;
+                
+                const initials = c.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                
+                item.innerHTML = `
+                    <div class="avatar">
+                        ${initials}
+                        <span class="status-dot"></span>
+                    </div>
+                    <div class="contact-info">
+                        <div class="contact-name">${c.contact_name}</div>
+                        <div class="contact-status-text">${isOnline ? 'Online' : 'Offline'}</div>
+                    </div>
+                `;
+                
+                item.addEventListener('click', () => {
+                    selectChatContact(c);
+                });
+                
+                listContainer.appendChild(item);
+            });
+        }
+
+        function selectChatContact(contact) {
+            activeChatContact = contact;
+            
+            // Toggle viewports
+            document.getElementById('chat-placeholder-viewport').style.display = 'none';
+            document.getElementById('chat-active-viewport').style.display = 'flex';
+            
+            // Set Header Details
+            document.getElementById('active-chat-name').innerText = contact.contact_name;
+            updateHeaderStatus();
+            
+            // Redraw sidebar to update active styles
+            renderContactsSidebar();
+            
+            // Clear inputs
+            document.getElementById('message-text-input').value = '';
+            document.getElementById('message-search-input').value = '';
+            
+            // Fetch messages
+            fetchMessages();
+        }
+
+        function updateHeaderStatus() {
+            if (!activeChatContact) return;
+            const isOnline = window.onlineUsers.has(activeChatContact.platform_user_id);
+            const statusNode = document.getElementById('active-chat-status');
+            const dot = statusNode.querySelector('.status-dot-inline');
+            const text = statusNode.querySelector('.status-text');
+
+            if (isOnline) {
+                statusNode.className = 'active-contact-status online';
+                dot.style.backgroundColor = 'var(--success-color)';
+                text.innerText = 'online';
+            } else {
+                statusNode.className = 'active-contact-status';
+                dot.style.backgroundColor = 'var(--text-muted)';
+                text.innerText = 'offline';
+            }
+        }
+
+        async function fetchMessages() {
+            if (!activeChatContact) return;
+            
+            const listViewport = document.getElementById('messages-display-viewport');
+            const searchQuery = document.getElementById('message-search-input').value.trim();
+            
+            try {
+                let messages = [];
+
+                if (isApplicationOnline) {
+                    const res = await fetch(`/api/messages/history?contact_id=${activeChatContact.platform_user_id}&q=${encodeURIComponent(searchQuery)}`);
+                    if (res.ok) {
+                        messages = await res.json();
+                        
+                        // Cache successfully loaded messages
+                        if (!searchQuery && typeof dbSave === 'function') {
+                            for (const m of messages) {
+                                await dbSave('cached_messages', m);
+                            }
+                        }
+                    }
+                } else {
+                    // Load from IndexedDB cached messages
+                    if (typeof dbGetAll === 'function') {
+                        const cached = await dbGetAll('cached_messages');
+                        
+                        // Filter messages linked to current active chat thread
+                        messages = cached.filter(m => 
+                            ((m.sender_id === currentUser.id && m.receiver_id === activeChatContact.platform_user_id) ||
+                            (m.sender_id === activeChatContact.platform_user_id && m.receiver_id === currentUser.id))
+                        );
+
+                        // If search query, filter client side
+                        if (searchQuery) {
+                            messages = messages.filter(m => m.message.toLowerCase().includes(searchQuery.toLowerCase()));
+                        }
+                    }
+                }
+
+                // Inject offline pending messages currently in queue
+                if (typeof dbGetAll === 'function') {
+                    const pending = await dbGetAll('pending_messages');
+                    const threadPending = pending.filter(m => 
+                        m.sender_id === currentUser.id && m.receiver_id === activeChatContact.platform_user_id
+                    );
+                    
+                    // Deduplicate in case message exists in both
+                    threadPending.forEach(p => {
+                        if (!messages.find(m => m.id === p.id)) {
+                            messages.push(p);
+                        }
+                    });
+                }
+
+                // Sort messages by timestamp asc
+                messages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+                renderMessages(messages);
+            } catch (err) {
+                console.error('Failed to load messages:', err);
+            }
+        }
+
+        function renderMessages(messages) {
+            const listViewport = document.getElementById('messages-display-viewport');
+            listViewport.innerHTML = '';
+
+            if (messages.length === 0) {
+                listViewport.innerHTML = `
+                    <div style="text-align: center; color: var(--text-muted); padding-top: 40px; font-size: 0.9rem;">
+                        No messages. Type below to start emergency communication.
+                    </div>
+                `;
+                return;
+            }
+
+            messages.forEach(m => {
+                const wrapper = document.createElement('div');
+                const isOutgoing = m.sender_id === currentUser.id;
+                wrapper.className = `message-wrapper ${isOutgoing ? 'outgoing' : 'incoming'}`;
+                
+                const timeStr = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                // SVG markup for message status icons
+                let statusIcon = '';
+                if (isOutgoing) {
+                    if (m.status === 'pending') {
+                        statusIcon = `<span class="message-status-icon pending" title="Queued Offline"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor"/><polyline points="12 6 12 12 16 14" stroke="currentColor"/></svg></span>`;
+                    } else if (m.status === 'sent') {
+                        statusIcon = `<span class="message-status-icon sent" title="Sent to Server"><svg viewBox="0 0 24 24" fill="none"><polyline points="20 6 9 17 4 12" stroke="currentColor"/></svg></span>`;
+                    } else if (m.status === 'delivered') {
+                        statusIcon = `<span class="message-status-icon delivered" title="Delivered"><svg viewBox="0 0 24 24" fill="none"><path d="M17 6L8.5 14.5L5 11M22 6L13.5 14.5" stroke="currentColor"/></svg></span>`;
+                    } else { // failed
+                        statusIcon = `<span class="message-status-icon failed" title="Delivery Failed"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor"/></svg></span>`;
+                    }
+                }
+
+                wrapper.innerHTML = `
+                    <div class="message-bubble">${m.message}</div>
+                    <div class="message-meta">
+                        <span>${timeStr}</span>
+                        ${statusIcon}
+                    </div>
+                `;
+                listViewport.appendChild(wrapper);
+            });
+
+            // Scroll to bottom
+            listViewport.scrollTop = listViewport.scrollHeight;
+        }
+
+        // ==========================================
+        // SEND MESSAGE LOGIC
+        // ==========================================
+        const inputForm = document.getElementById('chat-input-form');
+        
+        inputForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (!activeChatContact) return;
+            
+            const inputField = document.getElementById('message-text-input');
+            const messageText = inputField.value.trim();
+            if (!messageText) return;
+
+            const msgId = generateUUID();
+            const msgObj = {
+                id: msgId,
+                sender_id: currentUser.id,
+                receiver_id: activeChatContact.platform_user_id,
+                message: messageText,
+                status: 'pending',
+                timestamp: new Date().toISOString()
+            };
+
+            // Reset input and clear typing status early
+            inputField.value = '';
+            socketSendTypingState(activeChatContact.platform_user_id, false);
+
+            try {
+                // Always save to IndexedDB cache for offline view stability
+                if (typeof dbSave === 'function') {
+                    await dbSave('cached_messages', msgObj);
+                }
+
+                if (!isApplicationOnline) {
+                    // Queue locally
+                    if (typeof dbSave === 'function') {
+                        await dbSave('pending_messages', msgObj);
+                    }
+                    showToast('Message Queued', 'Sending offline. Will sync once connected.', 'warning');
+                    fetchMessages();
+                } else {
+                    // Try to send via real-time WebSocket
+                    const success = socketSendMessage(msgId, activeChatContact.platform_user_id, messageText);
+                    if (!success) {
+                        // Queue if WebSocket transmission failed
+                        if (typeof dbSave === 'function') {
+                            await dbSave('pending_messages', msgObj);
+                        }
+                        showToast('Message Queued', 'Failed socket delivery. Saved to sync queue.', 'warning');
+                    } else {
+                        // Marked as sent in local cache
+                        msgObj.status = 'sent';
+                        if (typeof dbSave === 'function') {
+                            await dbSave('cached_messages', msgObj);
+                        }
+                    }
+                    fetchMessages();
+                }
+            } catch (err) {
+                console.error('Failed to post message:', err);
+            }
+        });
+
+        // Typing indicator listeners
+        const textInput = document.getElementById('message-text-input');
+        
+        textInput.addEventListener('input', () => {
+            if (!activeChatContact) return;
+            
+            socketSendTypingState(activeChatContact.platform_user_id, true);
+            
+            // Debounce stops typing trigger
+            clearTimeout(typingTimeout);
+            typingTimeout = setTimeout(() => {
+                socketSendTypingState(activeChatContact.platform_user_id, false);
+            }, 1500);
+        });
+
+        // ==========================================
+        // CUSTOM WEBSOCKET EVENT HOOKS
+        // ==========================================
+        
+        // Online users changes
+        window.addEventListener('connecthub-online-list-updated', () => {
+            renderContactsSidebar();
+            updateHeaderStatus();
+        });
+
+        window.addEventListener('connecthub-user-status-changed', () => {
+            renderContactsSidebar();
+            updateHeaderStatus();
+        });
+
+        // Incoming message handler
+        window.addEventListener('connecthub-receive-message', (e) => {
+            const msg = e.detail;
+            if (activeChatContact && (msg.sender_id === activeChatContact.platform_user_id || msg.receiver_id === activeChatContact.platform_user_id)) {
+                fetchMessages();
+            }
+        });
+
+        // Message status updates (sent -> delivered)
+        window.addEventListener('connecthub-message-status-updated', (e) => {
+            const data = e.detail;
+            if (activeChatContact) {
+                fetchMessages();
+            }
+        });
+
+        // Typing status updates
+        window.addEventListener('connecthub-typing-status', (e) => {
+            const data = e.detail;
+            const indicator = document.getElementById('typing-indicator-node');
+            
+            if (activeChatContact && data.sender_id === activeChatContact.platform_user_id) {
+                if (data.is_typing) {
+                    indicator.style.display = 'block';
+                } else {
+                    indicator.style.display = 'none';
+                }
+            }
+        });
+
+        // Trigger on sync completions
+        window.addEventListener('connecthub-synced', () => {
+            if (activeChatContact) {
+                fetchMessages();
+            }
+        });
+
+        // Directory search bindings
+        document.getElementById('user-directory-search').addEventListener('input', loadContactsList);
+        document.getElementById('message-search-input').addEventListener('input', fetchMessages);
+
+        // Fetch contacts list on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(loadContactsList, 600);
+        });
+    </script>
+</body>
+</html>

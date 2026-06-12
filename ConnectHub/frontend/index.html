@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ConnectHub – Emergency Offline Messaging</title>
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Theme Switcher Script (Runs early to avoid flash of light mode) -->
+    <script src="/js/theme.js"></script>
+    <style>
+        .hero-section {
+            text-align: center;
+            padding: 80px 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .hero-section h1 {
+            font-size: 3.5rem;
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 20px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero-section p {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            margin-bottom: 35px;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-top: 40px;
+        }
+        .feature-card {
+            text-align: left;
+        }
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: var(--radius-md);
+            background-color: var(--accent-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            stroke: var(--accent-color);
+            fill: none;
+        }
+        .feature-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+        .cta-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <a href="/" class="nav-brand">
+            <svg viewBox="0 0 24 24">
+                <rect x="2" y="2" width="20" height="20" rx="4" stroke-width="2"></rect>
+                <path d="M12 7v10M7 12h10" stroke-width="2"></path>
+            </svg>
+            ConnectHub
+        </a>
+        <div class="nav-actions">
+            <div class="network-widget" id="network-status-widget">
+                <span class="network-dot"></span>
+                <span class="network-text">Loading...</span>
+            </div>
+            <button class="theme-btn" id="navbar-theme-btn"></button>
+            <a href="/login" class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.9rem;">Sign In</a>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <h1>Emergency Offline Messaging Platform</h1>
+            <p>
+                ConnectHub keeps you connected with your emergency contacts when internet connectivity is down. Compose messages offline, sync automatically when online, and send instant SOS broadcasts in critical situations.
+            </p>
+            <div class="cta-buttons">
+                <a href="/register" class="btn btn-primary">Create Free Account</a>
+                <a href="/login" class="btn btn-secondary">Access Dashboard</a>
+            </div>
+        </section>
+
+        <!-- Features Grid -->
+        <section class="features-grid">
+            
+            <div class="glass-card feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 12h-6l-3 9L9 3l-3 9H2"/>
+                    </svg>
+                </div>
+                <h3>Offline Queueing</h3>
+                <p>Compose and queue messages locally when completely offline. Built-in IndexedDB caches messages securely until connection is restored.</p>
+            </div>
+
+            <div class="glass-card feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                </div>
+                <h3>Background Sync</h3>
+                <p>Auto-detects browser network state and server availability. Pending items are automatically synced to the database without user intervention.</p>
+            </div>
+
+            <div class="glass-card feature-card">
+                <div class="feature-icon">
+                    <svg viewBox="0 0 24 24" width="24" height="24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                </div>
+                <h3>SOS Broadcast</h3>
+                <p>One-click emergency siren and SOS. Broadcasts pre-formated messages with server/local timestamp to all priority contacts instantly.</p>
+            </div>
+
+        </section>
+
+    </div>
+
+    <!-- Core App JS Scripts -->
+    <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Console Dashboard – ConnectHub</title>
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Theme Switcher Script -->
+    <script src="/js/theme.js"></script>
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <a href="/dashboard" class="nav-brand">
+            <svg viewBox="0 0 24 24">
+                <rect x="2" y="2" width="20" height="20" rx="4" stroke-width="2"></rect>
+                <path d="M12 7v10M7 12h10" stroke-width="2"></path>
+            </svg>
+            ConnectHub
+        </a>
+        
+        <div class="nav-menu">
+            <a href="/dashboard" class="nav-link active">Dashboard</a>
+            <a href="/contacts" class="nav-link">Contacts</a>
+            <a href="/messages" class="nav-link">Messages</a>
+            <a href="/emergency" class="nav-link">SOS Console</a>
+        </div>
+
+        <div class="nav-actions">
+            <div class="network-widget" id="network-status-widget">
+                <span class="network-dot"></span>
+                <span class="network-text">Loading...</span>
+            </div>
+            <button class="theme-btn" id="navbar-theme-btn"></button>
+            <span id="user-username-display" style="font-weight: 600; font-size: 0.95rem; margin-right: 5px;"></span>
+            <button class="logout-btn" id="navbar-logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="app-container">
+        
+        <!-- Stats Row -->
+        <section class="dashboard-grid">
+            
+            <div class="glass-card stat-card" onclick="window.location.href='/contacts'" style="cursor: pointer;">
+                <div class="stat-icon contacts-icon">
+                    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                </div>
+                <div class="stat-info">
+                    <h3>Total Contacts</h3>
+                    <div class="stat-number" id="stat-contacts">0</div>
+                </div>
+            </div>
+
+            <div class="glass-card stat-card" onclick="window.location.href='/messages'" style="cursor: pointer;">
+                <div class="stat-icon sent-icon">
+                    <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <div class="stat-info">
+                    <h3>Messages Sent</h3>
+                    <div class="stat-number" id="stat-sent">0</div>
+                </div>
+            </div>
+
+            <div class="glass-card stat-card" onclick="window.location.href='/messages'" style="cursor: pointer;">
+                <div class="stat-icon pending-icon">
+                    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="stat-info">
+                    <h3>Pending Messages</h3>
+                    <div class="stat-number" id="stat-pending">0</div>
+                </div>
+            </div>
+
+            <div class="glass-card stat-card" onclick="window.location.href='/emergency'" style="cursor: pointer;">
+                <div class="stat-icon alerts-icon">
+                    <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></svg>
+                </div>
+                <div class="stat-info">
+                    <h3>SOS Alerts Sent</h3>
+                    <div class="stat-number" id="stat-alerts">0</div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Detailed Dashboard Panels -->
+        <div class="dashboard-layout">
+            
+            <!-- Recent Activity Panel -->
+            <div class="glass-card recent-activity">
+                <h2>Recent Platform Activity</h2>
+                <div class="activity-list" id="dashboard-activity-list">
+                    <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+                        No recent activity recorded.
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Information & Offline Guide -->
+            <div class="glass-card" style="display: flex; flex-direction: column; gap: 15px;">
+                <h2 style="font-size: 1.3rem;">System Information</h2>
+                <div style="font-size: 0.95rem; line-height: 1.5;">
+                    <p style="margin-bottom: 10px;">
+                        <strong>ConnectHub</strong> runs in <strong>Hybrid Mode</strong>. When online, messages transmit instantly via real-time WebSockets.
+                    </p>
+                    <p style="margin-bottom: 10px;">
+                        When offline, the app switches to <strong>Local Buffer</strong> mode. Messages are queued locally inside IndexedDB.
+                    </p>
+                </div>
+                <div style="margin-top: 10px; padding: 12px; background-color: var(--accent-light); border-radius: var(--radius-sm); border: 1px solid var(--accent-color); font-size: 0.85rem;">
+                    <strong>Tip:</strong> Click the connection widget in the navbar to toggle offline/online status to test the sync queue!
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Core App JS Scripts -->
+    <script src="/js/app.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/socket.js"></script>
+
+    <!-- Page Specific Script -->
+    <script>
+        async function loadDashboardData() {
+            // 1. Fetch stats and recent activity from API
+            try {
+                // If offline, stats from api might fail, load from Cache
+                let apiStats = { total_contacts: 0, messages_sent: 0, emergency_alerts_sent: 0, recent_activity: [] };
+                
+                if (isApplicationOnline) {
+                    const response = await fetch('/api/dashboard/stats');
+                    if (response.ok) {
+                        apiStats = await response.json();
+                        // Cache dashboard stats locally
+                        localStorage.setItem('cached_dashboard_stats', JSON.stringify(apiStats));
+                    }
+                } else {
+                    const cached = localStorage.getItem('cached_dashboard_stats');
+                    if (cached) {
+                        apiStats = JSON.parse(cached);
+                        showToast('Cached Data Loaded', 'Displaying offline dashboard data.', 'warning');
+                    }
+                }
+
+                // Get local pending messages from IndexedDB directly
+                let pendingCount = 0;
+                if (typeof dbGetAll === 'function') {
+                    const pending = await dbGetAll('pending_messages');
+                    pendingCount = pending.length;
+                }
+
+                // Render Stats
+                document.getElementById('stat-contacts').innerText = apiStats.total_contacts;
+                document.getElementById('stat-sent').innerText = apiStats.messages_sent;
+                document.getElementById('stat-pending').innerText = pendingCount;
+                document.getElementById('stat-alerts').innerText = apiStats.emergency_alerts_sent;
+
+                // Render Activity List
+                const activityContainer = document.getElementById('dashboard-activity-list');
+                activityContainer.innerHTML = '';
+
+                if (apiStats.recent_activity.length === 0) {
+                    activityContainer.innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); padding: 20px;">
+                            No recent activity recorded.
+                        </div>
+                    `;
+                    return;
+                }
+
+                apiStats.recent_activity.forEach(act => {
+                    const div = document.createElement('div');
+                    div.className = `activity-item ${act.type === 'sos' ? 'sos' : ''}`;
+                    
+                    const time = new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    const date = new Date(act.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+                    
+                    div.innerHTML = `
+                        <div class="activity-content">
+                            <span class="activity-title">${act.description}</span>
+                            <span class="activity-time">${date} at ${time}</span>
+                        </div>
+                        <span class="activity-badge ${act.status}">${act.status}</span>
+                    `;
+                    activityContainer.appendChild(div);
+                });
+
+            } catch (err) {
+                console.error('Failed to load dashboard statistics:', err);
+            }
+        }
+
+        // Add event listeners to sync triggers
+        window.addEventListener('connecthub-synced', () => {
+            loadDashboardData();
+        });
+        window.addEventListener('connecthub-sos-triggered', () => {
+            loadDashboardData();
+        });
+
+        // Trigger loading when DOM content loads and when app status shifts
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(loadDashboardData, 600); // Small timeout to allow auth initialization
+            setInterval(loadDashboardData, 8000); // Auto-refresh stats periodically
+        });
+    </script>
+</body>
+</html>

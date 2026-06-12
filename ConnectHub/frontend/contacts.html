@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Contacts – ConnectHub</title>
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Theme Switcher Script -->
+    <script src="/js/theme.js"></script>
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <a href="/dashboard" class="nav-brand">
+            <svg viewBox="0 0 24 24">
+                <rect x="2" y="2" width="20" height="20" rx="4" stroke-width="2"></rect>
+                <path d="M12 7v10M7 12h10" stroke-width="2"></path>
+            </svg>
+            ConnectHub
+        </a>
+        
+        <div class="nav-menu">
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+            <a href="/contacts" class="nav-link active">Contacts</a>
+            <a href="/messages" class="nav-link">Messages</a>
+            <a href="/emergency" class="nav-link">SOS Console</a>
+        </div>
+
+        <div class="nav-actions">
+            <div class="network-widget" id="network-status-widget">
+                <span class="network-dot"></span>
+                <span class="network-text">Loading...</span>
+            </div>
+            <button class="theme-btn" id="navbar-theme-btn"></button>
+            <span id="user-username-display" style="font-weight: 600; font-size: 0.95rem; margin-right: 5px;"></span>
+            <button class="logout-btn" id="navbar-logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <div class="contacts-header">
+            <div style="display: flex; flex-direction: column; gap: 5px; flex: 1;">
+                <h1 style="font-size: 1.8rem; font-weight: 700;">Emergency Contacts</h1>
+                <p style="color: var(--text-secondary); font-size: 0.95rem;">Manage priority channels for immediate distress signals</p>
+            </div>
+            
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-secondary" onclick="exportBackupData()" title="Backup to JSON file">Export JSON</button>
+                <button class="btn btn-secondary" onclick="triggerImport()" title="Restore contacts from JSON file">Import JSON</button>
+                <input type="file" id="import-file-input" style="display: none;" accept=".json" onchange="importBackupData(event)">
+                <button class="btn btn-primary" id="add-contact-btn-trigger">Add Contact</button>
+            </div>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="form-group search-bar" style="margin-bottom: 25px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="contact-search" class="form-control" placeholder="Search contacts by name or phone...">
+        </div>
+
+        <!-- Contacts Grid -->
+        <div class="contacts-grid" id="contacts-grid-container">
+            <!-- Dynamic Contacts Rendered Here -->
+            <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">
+                Loading emergency contacts...
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Contact Modal (Add/Edit) -->
+    <div class="modal-overlay" id="contact-modal">
+        <div class="glass-card modal-content">
+            <h2 id="modal-title" style="margin-bottom: 20px;">Add Emergency Contact</h2>
+            <form id="contact-form">
+                <input type="hidden" id="contact-id">
+                
+                <div class="form-group">
+                    <label class="form-label" for="contact_name">Contact Name</label>
+                    <input type="text" id="contact_name" class="form-control" placeholder="e.g. John Doe" required>
+                    <small style="color: var(--text-muted); display: block; margin-top: 4px;">
+                        Tip: Set the name to match a platform username to enable secure real-time messaging.
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="phone_number">Phone Number</label>
+                    <input type="tel" id="phone_number" class="form-control" placeholder="e.g. +1234567890" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="priority_level">Priority Level</label>
+                    <select id="priority_level" class="form-control" style="background-color: var(--bg-secondary); color: var(--text-primary);">
+                        <option value="high">High (SOS Broadcast Recipient)</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="low">Low</option>
+                    </select>
+                </div>
+
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="modal-cancel-btn">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="modal-submit-btn">Save Contact</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Core App JS Scripts -->
+    <script src="/js/app.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/socket.js"></script>
+
+    <!-- Contacts CRUD JS -->
+    <script>
+        let contactsData = [];
+
+        async function fetchContacts() {
+            const searchQuery = document.getElementById('contact-search').value.trim();
+            const grid = document.getElementById('contacts-grid-container');
+
+            try {
+                if (isApplicationOnline) {
+                    const res = await fetch(`/api/contacts?q=${encodeURIComponent(searchQuery)}`);
+                    if (res.ok) {
+                        contactsData = await res.json();
+                        // Cache locally in IndexedDB if no active search filter
+                        if (!searchQuery && typeof dbClear === 'function') {
+                            await dbClear('cached_contacts');
+                            for (const c of contactsData) {
+                                await dbSave('cached_contacts', c);
+                            }
+                        }
+                    }
+                } else {
+                    // Offline cache loading
+                    if (typeof dbGetAll === 'function') {
+                        const cached = await dbGetAll('cached_contacts');
+                        // Apply client side search filter if exists
+                        if (searchQuery) {
+                            contactsData = cached.filter(c => 
+                                c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                                c.phone_number.includes(searchQuery)
+                            );
+                        } else {
+                            contactsData = cached;
+                        }
+                    }
+                }
+
+                renderContacts();
+            } catch (err) {
+                console.error('Failed to load contacts:', err);
+                grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--danger-color); padding: 40px;">Failed to retrieve contacts.</div>`;
+            }
+        }
+
+        function renderContacts() {
+            const grid = document.getElementById('contacts-grid-container');
+            grid.innerHTML = '';
+
+            if (contactsData.length === 0) {
+                grid.innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 40px;">
+                        No contacts found. Click "Add Contact" to save one.
+                    </div>
+                `;
+                return;
+            }
+
+            contactsData.forEach(c => {
+                const card = document.createElement('div');
+                card.className = `glass-card contact-card priority-${c.priority_level}`;
+                
+                const initials = c.contact_name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                
+                card.innerHTML = `
+                    <span class="contact-badge-priority">${c.priority_level}</span>
+                    <div class="contact-avatar">${initials}</div>
+                    <div class="contact-name">${c.contact_name}</div>
+                    <div class="contact-phone">${c.phone_number}</div>
+                    
+                    <div class="contact-actions">
+                        <a href="tel:${c.phone_number}" class="btn btn-secondary" style="padding: 6px; font-size: 0.8rem; display: flex; align-items: center; justify-content: center;" title="Call Emergency Contact">
+                            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" style="margin-right: 5px;">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                            </svg>
+                            Call
+                        </a>
+                        <button class="btn btn-secondary edit-btn" style="padding: 6px;" onclick="openEditModal(${c.id}, '${c.contact_name}', '${c.phone_number}', '${c.priority_level}')">Edit</button>
+                        <button class="btn btn-danger" style="padding: 6px;" onclick="deleteContact(${c.id})">Delete</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // Modal triggers
+        const modal = document.getElementById('contact-modal');
+        const form = document.getElementById('contact-form');
+        
+        document.getElementById('add-contact-btn-trigger').addEventListener('click', () => {
+            if (!isApplicationOnline) {
+                showToast('Offline Mode', 'Cannot add contacts while offline.', 'error');
+                return;
+            }
+            document.getElementById('modal-title').innerText = 'Add Emergency Contact';
+            document.getElementById('contact-id').value = '';
+            form.reset();
+            modal.classList.add('active');
+        });
+
+        document.getElementById('modal-cancel-btn').addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+
+        function openEditModal(id, name, phone, priority) {
+            if (!isApplicationOnline) {
+                showToast('Offline Mode', 'Cannot modify contacts while offline.', 'error');
+                return;
+            }
+            document.getElementById('modal-title').innerText = 'Edit Emergency Contact';
+            document.getElementById('contact-id').value = id;
+            document.getElementById('contact_name').value = name;
+            document.getElementById('phone_number').value = phone;
+            document.getElementById('priority_level').value = priority;
+            modal.classList.add('active');
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const id = document.getElementById('contact-id').value;
+            const contact_name = document.getElementById('contact_name').value.trim();
+            const phone_number = document.getElementById('phone_number').value.trim();
+            const priority_level = document.getElementById('priority_level').value;
+
+            const payload = { contact_name, phone_number, priority_level };
+            let url = '/api/contacts';
+            let method = 'POST';
+
+            if (id) {
+                url = `/api/contacts/${id}`;
+                method = 'PUT';
+            }
+
+            try {
+                const res = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    showToast('Contact Saved', 'Emergency contact successfully saved.', 'success');
+                    modal.classList.remove('active');
+                    fetchContacts();
+                } else {
+                    const data = await res.json();
+                    showToast('Error saving contact', data.error || 'Request failed.', 'error');
+                }
+            } catch (err) {
+                showToast('Connection Error', 'Failed to reach server.', 'error');
+            }
+        });
+
+        async function deleteContact(id) {
+            if (!isApplicationOnline) {
+                showToast('Offline Mode', 'Cannot delete contacts while offline.', 'error');
+                return;
+            }
+            if (!confirm('Are you sure you want to delete this emergency contact?')) return;
+
+            try {
+                const res = await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast('Contact Deleted', 'Emergency contact deleted.', 'success');
+                    fetchContacts();
+                } else {
+                    showToast('Delete Failed', 'Failed to delete contact.', 'error');
+                }
+            } catch (err) {
+                showToast('Connection Error', 'Failed to reach server.', 'error');
+            }
+        }
+
+        // ==========================================
+        // BACKUP EXPORT & IMPORT LOGIC
+        // ==========================================
+        function exportBackupData() {
+            if (!isApplicationOnline) {
+                showToast('Backup Error', 'Export requires connection to server.', 'error');
+                return;
+            }
+            // Simply navigate to download route
+            window.location.href = '/api/backup/export';
+        }
+
+        function triggerImport() {
+            if (!isApplicationOnline) {
+                showToast('Offline Mode', 'Restoring backups requires server connectivity.', 'error');
+                return;
+            }
+            document.getElementById('import-file-input').click();
+        }
+
+        async function importBackupData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                showToast('Importing Data', 'Processing JSON backup...', 'warning');
+                const res = await fetch('/api/backup/import', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    showToast('Backup Restored', `Imported ${data.contacts_imported} contacts and ${data.messages_imported} messages.`, 'success');
+                    fetchContacts();
+                } else {
+                    showToast('Import Failed', data.error || 'Failed to import backup.', 'error');
+                }
+            } catch (err) {
+                showToast('Connection Error', 'Could not sync backup import.', 'error');
+            }
+            
+            // Clear file selector
+            event.target.value = '';
+        }
+
+        // Bind Live Search input
+        document.getElementById('contact-search').addEventListener('input', fetchContacts);
+
+        // Fetch contacts on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(fetchContacts, 600);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOS Console – ConnectHub</title>
+    <!-- CSS Stylesheet -->
+    <link rel="stylesheet" href="/css/style.css">
+    <!-- Theme Switcher Script -->
+    <script src="/js/theme.js"></script>
+</head>
+<body>
+
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <a href="/dashboard" class="nav-brand">
+            <svg viewBox="0 0 24 24">
+                <rect x="2" y="2" width="20" height="20" rx="4" stroke-width="2"></rect>
+                <path d="M12 7v10M7 12h10" stroke-width="2"></path>
+            </svg>
+            ConnectHub
+        </a>
+        
+        <div class="nav-menu">
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+            <a href="/contacts" class="nav-link">Contacts</a>
+            <a href="/messages" class="nav-link">Messages</a>
+            <a href="/emergency" class="nav-link active">SOS Console</a>
+        </div>
+
+        <div class="nav-actions">
+            <div class="network-widget" id="network-status-widget">
+                <span class="network-dot"></span>
+                <span class="network-text">Loading...</span>
+            </div>
+            <button class="theme-btn" id="navbar-theme-btn"></button>
+            <span id="user-username-display" style="font-weight: 600; font-size: 0.95rem; margin-right: 5px;"></span>
+            <button class="logout-btn" id="navbar-logout-btn">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="app-container">
+        
+        <div class="sos-container">
+            <h1 style="font-size: 2.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: -0.5px;">Emergency SOS Broadcast</h1>
+            <p style="color: var(--text-secondary); margin-top: 5px;">Press the button below to initiate an immediate broadcast to your saved emergency contacts.</p>
+
+            <!-- Large Circular SOS Button -->
+            <button class="sos-trigger-circle" id="sos-main-trigger-button">
+                SOS
+            </button>
+
+            <!-- Message Settings -->
+            <div class="glass-card sos-presets">
+                <h3 style="font-size: 1.15rem; margin-bottom: 15px; font-weight: 700; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                    Select SOS Message Template
+                </h3>
+                
+                <div id="preset-list">
+                    <button class="sos-preset-btn active" data-msg="I need immediate medical assistance.">
+                        🏥 Medical Assistance (Default)
+                    </button>
+                    <button class="sos-preset-btn" data-msg="Fire hazard or structural danger. Need help.">
+                        🔥 Fire / Structural Emergency
+                    </button>
+                    <button class="sos-preset-btn" data-msg="Threat to physical safety. Require security assistance.">
+                        🚨 Security / Threat Alert
+                    </button>
+                    <button class="sos-preset-btn" data-msg="Severe flooding or storm. Stranded without power.">
+                        🌪️ Natural Disaster Stranding
+                    </button>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px;">
+                    <label class="form-label">Custom Message Payload</label>
+                    <input type="text" id="sos-custom-text-input" class="form-control" placeholder="Type a custom message if needed...">
+                </div>
+            </div>
+
+            <!-- Notification Targets list -->
+            <div class="glass-card" style="margin-top: 20px; text-align: left;">
+                <h3 style="font-size: 1.15rem; margin-bottom: 15px; font-weight: 700;">Broadcast Targets</h3>
+                <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px;">
+                    The alert will be pushed to the following priority contacts:
+                </p>
+                <div id="sos-recipients-list" style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">
+                        No priority contacts saved.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Broadcasts list -->
+            <div class="glass-card" style="margin-top: 20px; text-align: left;">
+                <h3 style="font-size: 1.15rem; margin-bottom: 15px; font-weight: 700;">Recent Broadcast Logs</h3>
+                <div id="sos-logs-list" style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- Alerts list loaded dynamically -->
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- Core App JS Scripts -->
+    <script src="/js/app.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/socket.js"></script>
+
+    <!-- SOS Console Specific JS -->
+    <script>
+        let selectedPresetMessage = "I need immediate medical assistance.";
+        let priorityRecipients = [];
+
+        // Load page statistics and priority contact lists
+        async function initSOSPage() {
+            try {
+                // Fetch recipients
+                if (isApplicationOnline) {
+                    const res = await fetch('/api/contacts');
+                    if (res.ok) {
+                        const contacts = await res.json();
+                        // Filter high priority contacts
+                        priorityRecipients = contacts.filter(c => c.priority_level === 'high');
+                    }
+                } else {
+                    if (typeof dbGetAll === 'function') {
+                        const cached = await dbGetAll('cached_contacts');
+                        priorityRecipients = cached.filter(c => c.priority_level === 'high');
+                    }
+                }
+                
+                renderRecipients();
+                loadSOSLogs();
+            } catch (err) {
+                console.error('Failed to initialize SOS page:', err);
+            }
+        }
+
+        function renderRecipients() {
+            const list = document.getElementById('sos-recipients-list');
+            list.innerHTML = '';
+
+            if (priorityRecipients.length === 0) {
+                list.innerHTML = `
+                    <div style="color: var(--warning-color); font-size: 0.9rem; font-weight: 600;">
+                        ⚠️ Warning: You have no high priority contacts saved. SOS will only broadcast globally. Go to Contacts and set "High" priority for channels you wish to alert.
+                    </div>
+                `;
+                return;
+            }
+
+            priorityRecipients.forEach(r => {
+                const item = document.createElement('div');
+                item.style.padding = '8px 12px';
+                item.style.backgroundColor = 'var(--bg-secondary)';
+                item.style.borderRadius = 'var(--radius-sm)';
+                item.style.border = '1px solid var(--border-color)';
+                item.style.fontSize = '0.9rem';
+                item.style.fontWeight = '500';
+                item.innerHTML = `
+                    <strong>${r.contact_name}</strong> - ${r.phone_number} 
+                    <span style="font-size: 0.75rem; color: var(--danger-color); font-weight: 700; margin-left: 5px; text-transform: uppercase;">[priority high]</span>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        async function loadSOSLogs() {
+            const list = document.getElementById('sos-logs-list');
+            
+            try {
+                if (!isApplicationOnline) {
+                    list.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">Logs are unavailable in offline mode.</div>`;
+                    return;
+                }
+
+                const res = await fetch('/api/emergency/alerts');
+                if (res.ok) {
+                    const logs = await res.json();
+                    list.innerHTML = '';
+
+                    if (logs.length === 0) {
+                        list.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">No previous emergency alerts recorded.</div>`;
+                        return;
+                    }
+
+                    logs.forEach(log => {
+                        const div = document.createElement('div');
+                        div.style.padding = '10px 14px';
+                        div.style.backgroundColor = 'var(--bg-secondary)';
+                        div.style.borderLeft = '3px solid var(--danger-color)';
+                        div.style.borderRadius = '4px';
+                        
+                        const time = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        const date = new Date(log.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
+                        
+                        div.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 2px;">
+                                <span>Broadcast by: <strong>${log.username}</strong></span>
+                                <span>${date} at ${time}</span>
+                            </div>
+                            <div style="font-size: 0.95rem; font-weight: 500;">${log.alert_message}</div>
+                        `;
+                        list.appendChild(div);
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to load SOS logs:', err);
+            }
+        }
+
+        // Toggle Preset options
+        const presetButtons = document.querySelectorAll('.sos-preset-btn');
+        const customInput = document.getElementById('sos-custom-text-input');
+
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Clear active
+                presetButtons.forEach(b => b.classList.remove('active'));
+                
+                // Set active
+                btn.classList.add('active');
+                selectedPresetMessage = btn.getAttribute('data-msg');
+                
+                // Clear custom input to highlight preset usage
+                customInput.value = '';
+            });
+        });
+
+        customInput.addEventListener('input', () => {
+            if (customInput.value.trim()) {
+                // Remove active classes since user is typing custom message
+                presetButtons.forEach(b => b.classList.remove('active'));
+                selectedPresetMessage = customInput.value.trim();
+            } else {
+                // Re-enable first preset if empty
+                presetButtons[0].classList.add('active');
+                selectedPresetMessage = presetButtons[0].getAttribute('data-msg');
+            }
+        });
+
+        // Trigger SOS Action
+        document.getElementById('sos-main-trigger-button').addEventListener('click', async () => {
+            const finalMessage = customInput.value.trim() ? customInput.value.trim() : selectedPresetMessage;
+
+            if (!confirm(`Are you absolutely sure you want to broadcast this SOS alert?\n\n"${finalMessage}"`)) return;
+
+            try {
+                if (!isApplicationOnline) {
+                    showToast('Offline Mode', 'Storing offline SOS alert. Will broadcast immediately once connection returns.', 'error');
+                    
+                    const alertObj = {
+                        id: Date.now(),
+                        alert_message: finalMessage,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    if (typeof dbSave === 'function') {
+                        await dbSave('pending_messages', {
+                            id: 'sos_' + alertObj.id,
+                            receiver_id: 0, // Broadcast code
+                            message: `[OFFLINE SOS ALERT] ${alertObj.alert_message}`,
+                            status: 'pending',
+                            timestamp: alertObj.timestamp
+                        });
+                    }
+                    return;
+                }
+
+                const res = await fetch('/api/emergency/sos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: finalMessage })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    showToast('SOS Broadcasted', `Alert sent. Notified ${data.notified_contacts.length} priority contacts.`, 'success');
+                    customInput.value = '';
+                    loadSOSLogs();
+                } else {
+                    showToast('SOS Broadcast Failed', 'Server rejected emergency broadcast.', 'error');
+                }
+            } catch (err) {
+                showToast('Connection Error', 'Failed to communicate with emergency backend.', 'error');
+            }
+        });
+
+        // Listen for status synced triggers to update log
+        window.addEventListener('connecthub-synced', () => {
+            loadSOSLogs();
+        });
+
+        // Initialize Console details on load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(initSOSPage, 600);
+        });
+    </script>
+</body>
+</html>
